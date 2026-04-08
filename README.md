@@ -91,12 +91,3 @@ Or use the repo-level installer after patching:
 The one-click patcher writes its results to:
 
 `.\output`
-
-## Repo-safe workflow
-
-If you publish this repo, keep it script-only:
-
-- commit your scripts and docs
-- do not commit Acer files
-- do not commit `internal/build/`
-- require users to obtain the official Acer package themselves

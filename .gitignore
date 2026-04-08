@@ -1,0 +1,16 @@
+internal/build/
+output/
+input/
+internal/work/
+tmp/
+artifacts/
+*.appx
+*.msi
+*.asar
+*.zip
+*.7z
+*.cab
+*.lnk
+*.log
+Desktop.ini
+Thumbs.db

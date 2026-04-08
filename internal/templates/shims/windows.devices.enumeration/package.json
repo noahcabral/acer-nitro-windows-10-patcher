@@ -1,0 +1,5 @@
+{
+  "name": "@nodert-win10-rs4/windows.devices.enumeration",
+  "version": "0.0.0-win10-portable",
+  "main": "lib/main.js"
+}

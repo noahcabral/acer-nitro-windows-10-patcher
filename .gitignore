@@ -1,7 +1,11 @@
-internal/build/
-output/
-input/
-internal/work/
+internal/build/*
+!internal/build/.gitkeep
+output/*
+!output/.gitkeep
+input/*
+!input/.gitkeep
+internal/work/*
+!internal/work/.gitkeep
 tmp/
 artifacts/
 *.appx

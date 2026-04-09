@@ -4,6 +4,10 @@ This repo recreates a working Windows 10 NitroSense setup without redistributing
 
 `BYOI` means `bring your own installer`: you supply Acer's official `NitroSense_5.1.385` package locally, and the scripts patch/build everything on your machine.
 
+## Community
+
+Discord: [https://discord.gg/v7nG4SgNYr](https://discord.gg/v7nG4SgNYr)
+
 ## What this does
 
 - installs the working Win10 backend stack

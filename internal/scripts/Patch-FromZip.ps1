@@ -26,8 +26,10 @@ if ($stoppedOutputProcesses.Count -gt 0) {
 }
 
 $zipFiles = @(Get-ChildItem -LiteralPath $inputDir -File | Where-Object { $_.Extension -ieq ".zip" })
-if ($zipFiles.Count -eq 0) {
-    throw "No zip file was found in $inputDir. Put the original NitroSense zip there and run patch.bat again."
+$inputDirectories = @(Get-ChildItem -LiteralPath $inputDir -Directory | Where-Object { $_.Name -ne '.gitkeep' })
+
+if (($zipFiles.Count -gt 0) -and ($inputDirectories.Count -gt 0)) {
+    throw "Found both zip file(s) and folder(s) in $inputDir. Keep only one source there and run patch.bat again."
 }
 
 if ($zipFiles.Count -gt 1) {
@@ -35,8 +37,6 @@ if ($zipFiles.Count -gt 1) {
     throw "More than one zip was found in $inputDir ($names). Keep only one zip there and run patch.bat again."
 }
 
-$zipPath = $zipFiles[0].FullName
-$zipBaseName = [System.IO.Path]::GetFileNameWithoutExtension($zipPath)
 $expandedRoot = Join-Path $workDir "expanded-zip"
 $asarRoot = Join-Path $workDir "asar-extracted"
 $portableOut = Join-Path $outputDir "NitroSense_portable"
@@ -48,10 +48,21 @@ Reset-Directory -Path $expandedRoot
 Reset-Directory -Path $asarRoot
 Reset-Directory -Path $outputDir
 
-Write-Host "[1/5] Extracting zip: $zipPath"
-Expand-Archive -LiteralPath $zipPath -DestinationPath $expandedRoot -Force
+if ($zipFiles.Count -eq 1) {
+    $sourceDescription = $zipFiles[0].Name
+    $zipPath = $zipFiles[0].FullName
+    Write-Host "[1/5] Extracting zip: $zipPath"
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $expandedRoot -Force
+    $packageRoot = Get-PackageRootFromExpandedZip -ExpandedRoot $expandedRoot
+} elseif ($inputDirectories.Count -eq 1) {
+    $sourceDescription = $inputDirectories[0].Name
+    $sourceRoot = $inputDirectories[0].FullName
+    Write-Host "[1/5] Using extracted folder: $sourceRoot"
+    $packageRoot = Get-PackageRootFromExpandedZip -ExpandedRoot $sourceRoot
+} else {
+    throw "No patch source was found in $inputDir. Put exactly one NitroSense zip or one extracted NitroSense folder there and run patch.bat again."
+}
 
-$packageRoot = Get-PackageRootFromExpandedZip -ExpandedRoot $expandedRoot
 Write-Host "[2/5] Package root found: $packageRoot"
 
 $appxPath = Get-MainUwpAppxPath -PackageRoot $packageRoot
@@ -90,8 +101,8 @@ $readme = @"
 NitroSense Win10 output
 =======================
 
-Source zip:
-$($zipFiles[0].Name)
+Source:
+$sourceDescription
 
 Contents:
 - NitroSense_portable : patched portable frontend

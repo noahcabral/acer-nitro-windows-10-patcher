@@ -6,7 +6,7 @@ echo.
 echo NitroSense Win10 Patcher
 echo ========================
 echo.
-echo Put exactly one original Acer NitroSense zip file into:
+echo Put exactly one original Acer NitroSense zip file or one extracted NitroSense folder into:
 echo   "%cd%\input"
 echo.
 echo When patching finishes, open:

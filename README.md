@@ -45,7 +45,7 @@ This project is an unofficial compatibility workflow. It is not affiliated with 
 
 ## End-user flow
 
-1. Put exactly one original Acer NitroSense zip into [input](C:/Users/noah/Desktop/nitrosense-win10-byoi/input).
+1. Put exactly one original Acer NitroSense zip or one extracted NitroSense folder into [input](C:/Users/noah/Desktop/nitrosense-win10-byoi/input).
 2. Double-click [patch.bat](C:/Users/noah/Desktop/nitrosense-win10-byoi/patch.bat).
 3. Wait for patching to finish.
 4. Open [output](C:/Users/noah/Desktop/nitrosense-win10-byoi/output).

@@ -188,38 +188,8 @@
     font-size: 11px;
   }
 
-  .ns-curve-readouts {
-    margin-top: 8px;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .ns-curve-readout {
-    padding: 8px 10px;
-    border: 1px solid rgba(255, 102, 36, 0.16);
-    background: rgba(0, 0, 0, 0.18);
-    text-align: center;
-  }
-
-  .ns-curve-readout-label {
-    display: block;
-    font-size: 9px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.45);
-  }
-
-  .ns-curve-readout-value {
-    display: block;
-    margin-top: 3px;
-    font-size: 12px;
-    color: var(--color-ff);
-    line-height: 1.2;
-  }
-
   .ns-curve-points {
-    margin-top: 8px;
+    margin-top: 12px;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 6px;
@@ -395,6 +365,10 @@
     function walkVisibleLeaves() {
       return Array.from(document.querySelectorAll("body *"))
         .filter((element) => leafText(element).length > 0);
+    }
+
+    function isCurveUiElement(element) {
+      return !!(element instanceof HTMLElement && element.closest(".ns-curve-host, .ns-curve-workspace"));
     }
 
     function findExactText(text) {
@@ -704,7 +678,45 @@
           });
         }
       }
-      return matches.find((value) => value > 0 && value < 130) ?? null;
+        return matches.find((value) => value >= 0 && value < 130) ?? null;
+      }
+
+    function getNumericProperty(source, keys) {
+      if (!source || typeof source !== "object") return null;
+      for (const key of keys) {
+        if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+        const value = Number(source[key]);
+        if (Number.isFinite(value) && value >= 0 && value < 130) {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    function getMonitoringWidgetTemperature(label) {
+      const visibleScopes = Array.from(document.querySelectorAll("body *"))
+        .filter((element) => element instanceof HTMLElement)
+        .filter((element) => isVisible(element))
+        .filter((element) => !isCurveUiElement(element))
+        .sort((left, right) => {
+          const leftRect = left.getBoundingClientRect();
+          const rightRect = right.getBoundingClientRect();
+          return (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
+        });
+
+      for (const element of visibleScopes) {
+        const text = lower((element.textContent || "").replace(/\s+/g, " ").trim());
+        if (!text || !text.includes(label)) continue;
+        if (!text.includes("monitoring")) continue;
+        if (/%/.test(text) && !/°?\s*c/.test(text)) continue;
+        const matches = [...text.matchAll(/(\d{1,3})\s*°?\s*c\b/ig)]
+          .map((match) => round(match[1]))
+          .filter((value) => value >= 0 && value < 130);
+        if (matches.length) {
+          return matches[matches.length - 1];
+        }
+      }
+      return null;
     }
 
     async function getMonitorSnapshot() {
@@ -723,22 +735,59 @@
     }
 
     async function getTemperatureMap() {
-      const monitorData = await getMonitorSnapshot();
       const temperatures = { cpu: null, gpu: null };
+
+      temperatures.cpu = getMonitoringWidgetTemperature("cpu");
+      temperatures.gpu = getMonitoringWidgetTemperature("gpu");
+      if (temperatures.cpu != null || temperatures.gpu != null) return temperatures;
+
+      const monitorData = await getMonitorSnapshot();
       if (monitorData && typeof monitorData === "object") {
-        temperatures.cpu = findValueByPathHint(monitorData, ["cpu", "temp"]);
-        temperatures.gpu = findValueByPathHint(monitorData, ["gpu", "temp"]);
+        const payload = monitorData.data && typeof monitorData.data === "object" ? monitorData.data : monitorData;
+        temperatures.cpu = getNumericProperty(payload, ["CPU_TEMPERATURE"]);
+        temperatures.gpu = getNumericProperty(payload, ["GPU1_TEMPERATURE"]);
+        if ((temperatures.gpu == null || temperatures.gpu <= 0) && getNumericProperty(payload, ["SYS1_TEMPERATURE"]) != null) {
+          temperatures.gpu = getNumericProperty(payload, ["SYS1_TEMPERATURE"]);
+        }
+        if (temperatures.cpu == null) temperatures.cpu = findValueByPathHint(payload, ["cpu", "temp"]);
+        if (temperatures.gpu == null) temperatures.gpu = findValueByPathHint(payload, ["gpu", "temp"]);
         if (temperatures.cpu == null) temperatures.cpu = findValueByPathHint(monitorData, ["cpu"]);
         if (temperatures.gpu == null) temperatures.gpu = findValueByPathHint(monitorData, ["gpu"]);
       }
       if (temperatures.cpu != null || temperatures.gpu != null) return temperatures;
 
-      const leaves = walkVisibleLeaves();
+      const visibleScopes = Array.from(document.querySelectorAll("body *"))
+        .filter((element) => element instanceof HTMLElement)
+        .filter((element) => isVisible(element))
+        .filter((element) => !isCurveUiElement(element))
+        .sort((left, right) => {
+          const leftText = (left.textContent || "").trim().length;
+          const rightText = (right.textContent || "").trim().length;
+          return leftText - rightText;
+        });
+
+      const findScopeTemperature = (label) => {
+        for (const element of visibleScopes) {
+          const text = lower((element.textContent || "").replace(/\s+/g, " ").trim());
+          if (!text || !text.includes(label)) continue;
+          const matches = [...text.matchAll(/(\d{1,3})\s*°?\s*c\b/ig)]
+            .map((match) => round(match[1]))
+            .filter((value) => value >= 0 && value < 130);
+          if (matches.length) return matches[matches.length - 1];
+        }
+        return null;
+      };
+
+      temperatures.cpu = findScopeTemperature("cpu");
+      temperatures.gpu = findScopeTemperature("gpu");
+      if (temperatures.cpu != null || temperatures.gpu != null) return temperatures;
+
+      const leaves = walkVisibleLeaves().filter((element) => !isCurveUiElement(element));
       for (const element of leaves) {
         const text = leafText(element);
         if (!/\d+/.test(text) || !/c/i.test(text)) continue;
         const number = round(text.replace(/[^\d]/g, ""));
-        if (!number || number > 130) continue;
+        if (number < 0 || number > 130) continue;
         const scope = element.parentElement?.parentElement || element.parentElement;
         const labelText = scope ? lower(scope.textContent || "") : "";
         if (temperatures.cpu == null && labelText.includes("cpu")) temperatures.cpu = number;
@@ -1008,21 +1057,11 @@
                 <span class="ns-curve-node-readout-value" data-role="node-readout-value">-- C / --%</span>
               </div>
             </div>
-          <div class="ns-curve-legend">
-            <span data-role="legend-left">35 C / 24%</span>
-            <span data-role="legend-right">92 C / 100%</span>
-          </div>
-          <div class="ns-curve-readouts">
-            <div class="ns-curve-readout">
-              <span class="ns-curve-readout-label">Current Temp</span>
-              <span class="ns-curve-readout-value" data-role="current-temp">-- C</span>
+            <div class="ns-curve-legend">
+              <span data-role="legend-left">35 C / 24%</span>
+              <span data-role="legend-right">92 C / 100%</span>
             </div>
-            <div class="ns-curve-readout">
-              <span class="ns-curve-readout-label">Target Speed</span>
-              <span class="ns-curve-readout-value" data-role="target-speed">-- %</span>
-            </div>
-          </div>
-          <div class="ns-curve-points" data-role="points"></div>
+            <div class="ns-curve-points" data-role="points"></div>
           <div class="ns-curve-actions">
             <button class="ns-curve-button is-primary" type="button" data-action="enable">Curve On</button>
             <button class="ns-curve-button" type="button" data-action="sync">Sync Both</button>
@@ -1246,8 +1285,6 @@
         syncFans: getScenarioSyncFans(scenarioName),
         selectedIndex: null,
         status: host.querySelector("[data-role='status']"),
-        currentTempNode: host.querySelector("[data-role='current-temp']"),
-        targetSpeedNode: host.querySelector("[data-role='target-speed']"),
         stock: section
       };
 
@@ -1340,14 +1377,10 @@
       for (const panel of state.panels.values()) {
         const temperature = temperatures[panel.fanName];
         if (temperature == null) {
-          panel.currentTempNode.textContent = "-- C";
-          panel.targetSpeedNode.textContent = "-- %";
           continue;
         }
-        const target = round(interpolate(panel.points, temperature));
-        panel.currentTempNode.textContent = `${temperature} C`;
-        panel.targetSpeedNode.textContent = `${target}%`;
         if (!panel.enabled) continue;
+        const target = round(interpolate(panel.points, temperature));
         const stampKey = `${panel.scenarioName}:${panel.fanName}`;
         const currentStamp = state.lastApply.get(stampKey) || { temp: null, target: null, time: 0 };
         if (currentStamp.target === target && currentStamp.temp === temperature && Date.now() - currentStamp.time < 4500) {
@@ -1355,7 +1388,7 @@
         }
         await applyTargetSpeed(panel.stock, target);
         state.lastApply.set(stampKey, { temp: temperature, target, time: Date.now() });
-        panel.status.textContent = `${panel.fanName.toUpperCase()} ${temperature} C -> ${target}%`;
+        panel.status.textContent = `${panel.fanName.toUpperCase()} curve applied`;
       }
     }
 

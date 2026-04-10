@@ -75,6 +75,60 @@ function Stop-ProcessesFromPathPrefix {
     return $stopped
 }
 
+function Stop-ProcessesReferencingPathPrefix {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PathPrefix
+    )
+
+    $normalizedPrefix = [System.IO.Path]::GetFullPath($PathPrefix)
+    $normalizedPrefixAlt = $normalizedPrefix.Replace('\', '/')
+    $stopped = @()
+    $currentPid = $PID
+
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | ForEach-Object {
+        if ([int]$_.ProcessId -eq $currentPid) {
+            return
+        }
+
+        $matches = $false
+
+        if ($_.ExecutablePath) {
+            try {
+                $fullExecutablePath = [System.IO.Path]::GetFullPath($_.ExecutablePath)
+                if ($fullExecutablePath.StartsWith($normalizedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $matches = $true
+                }
+            } catch {
+            }
+        }
+
+        if (-not $matches -and $_.CommandLine) {
+            $commandLine = [string]$_.CommandLine
+            if ($commandLine -like "*$normalizedPrefix*" -or $commandLine -like "*$normalizedPrefixAlt*") {
+                $matches = $true
+            }
+        }
+
+        if (-not $matches) {
+            return
+        }
+
+        try {
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+            $stopped += [PSCustomObject]@{
+                ProcessName = $_.Name
+                Id = $_.ProcessId
+                Path = $_.ExecutablePath
+                CommandLine = $_.CommandLine
+            }
+        } catch {
+        }
+    }
+
+    return $stopped
+}
+
 function Normalize-PercentEncodedNames {
     param(
         [Parameter(Mandatory = $true)]
@@ -119,6 +173,38 @@ function Copy-DirectoryContents {
 
     Ensure-Directory -Path $Destination
     Copy-Item -Path (Join-Path $Source '*') -Destination $Destination -Recurse -Force
+}
+
+function Copy-DirectoryContentsResilient {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source,
+        [Parameter(Mandatory = $true)]
+        [string]$Destination
+    )
+
+    Ensure-Directory -Path $Destination
+
+    Get-ChildItem -LiteralPath $Source -Force | ForEach-Object {
+        $targetPath = Join-Path $Destination $_.Name
+
+        if ($_.PSIsContainer) {
+            Copy-DirectoryContentsResilient -Source $_.FullName -Destination $targetPath
+            return
+        }
+
+        try {
+            Copy-Item -LiteralPath $_.FullName -Destination $targetPath -Force -ErrorAction Stop
+        } catch {
+            $destinationExists = Test-Path -LiteralPath $targetPath
+            $isXsenseNative = ($targetPath -like '*\node_modules\xsense_native\build\Release\*.node')
+            if ($destinationExists -and $isXsenseNative) {
+                Write-Warning "Skipping locked native module already present: $targetPath"
+                return
+            }
+            throw
+        }
+    }
 }
 
 function Get-MainUwpAppxPath {

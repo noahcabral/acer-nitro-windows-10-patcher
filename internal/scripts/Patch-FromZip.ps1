@@ -91,7 +91,7 @@ foreach ($folder in @("AgentService", "AcerSystemMonitorService", "AcerQAAgent",
     }
 }
 
-foreach ($file in @("Common.ps1", "Install-Backend.ps1", "Register-NitroLauncher.ps1", "Create-DesktopShortcut.ps1", "Tidy-NitroConfig.ps1", "Install-NitroLauncherStub.ps1")) {
+foreach ($file in @("Common.ps1", "Install-Backend.ps1", "Register-NitroLauncher.ps1", "Create-DesktopShortcut.ps1", "Tidy-NitroConfig.ps1", "Install-NitroLauncherStub.ps1", "Run-BackgroundFanController.ps1", "Install-BackgroundFanController.ps1", "Uninstall-BackgroundFanController.ps1")) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $toolsOut $file) -Force
 }
 
@@ -119,6 +119,10 @@ Suggested next steps:
    .\Create-DesktopShortcut.ps1 -PortableRoot ..\NitroSense_portable
 4. If the Nitro key still points to Acer's old packaged launcher, replace it with the wrapper using:
    .\Install-NitroLauncherStub.ps1 -TargetExe ..\NitroSense_portable\NitroSense.exe
+5. If you want fan control to persist without keeping NitroSense open:
+   .\Install-BackgroundFanController.ps1 -InstallRoot "$env:ProgramFiles\NitroSense"
+   Then edit:
+   $env:ProgramData\NitroSense\FanController\config.json
 "@
 Write-Utf8NoBomFile -Path (Join-Path $outputDir "README.txt") -Content $readme
 

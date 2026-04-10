@@ -21,6 +21,8 @@ Discord: [https://discord.gg/v7nG4SgNYr](https://discord.gg/v7nG4SgNYr)
 - removes the Store startup dependency with local shims
 - neutralizes the packaged Store-version path and removes the Live Update widget from the user config
 - keeps the generated frontend on a clean renderer baseline to avoid the orange-screen regression
+- includes a built-in custom fan curve UI in `Scenario > Fan Control > Custom`
+- installs a background fan controller automatically so custom curves keep working after NitroSense is closed
 
 ## What this does not ship
 
@@ -58,7 +60,13 @@ The patcher builds:
 
 ## After patching
 
-If you want to install the backend on a Windows 10 machine:
+If you want the simplest normal-user setup after patching:
+
+1. Double-click [install.bat](C:/Users/noah/Desktop/nitrosense-win10-byoi/install.bat).
+2. Let it copy NitroSense into `C:\Program Files\NitroSense`.
+3. It will install the backend, register the launcher task, create the desktop shortcut, apply the Nitro-key launcher wrapper, and install the background fan controller.
+
+If you only want to install the backend manually on a Windows 10 machine:
 
 1. Reboot once with `Disable driver signature enforcement`.
 2. Open an elevated PowerShell in `output\tools`.
@@ -76,11 +84,47 @@ Then optionally run:
 .\Tidy-NitroConfig.ps1
 ```
 
-Or use the repo-level installer after patching:
+## Optional background fan controller
 
-1. Double-click [install.bat](C:/Users/noah/Desktop/nitrosense-win10-byoi/install.bat).
-2. Let it copy NitroSense into `C:\Program Files\NitroSense`.
-3. It will install the backend, register the launcher task, create the desktop shortcut, and apply the Nitro-key launcher wrapper.
+The main installer now installs the background fan controller automatically.
+
+If you ever need to reinstall it manually:
+
+```powershell
+.\output\tools\Install-BackgroundFanController.ps1 -InstallRoot "$env:ProgramFiles\NitroSense"
+```
+
+This installs a hidden autostarting controller that:
+
+- reads temperatures directly from Acer System Monitor Service on `127.0.0.1:46753`
+- sends `FAN_CONTROL` updates directly to Acer Agent Service on `127.0.0.1:46933`
+- keeps working after NitroSense is closed
+- follows the NitroSense scenario config and built-in custom fan curve editor
+
+Config:
+
+`C:\ProgramData\NitroSense\FanController\config.json`
+
+Log:
+
+`C:\ProgramData\NitroSense\FanController\controller.log`
+
+Current tradeoff:
+
+- while it is running, it owns custom fan mode and will take fan control back on the next polling cycle if NitroSense changes it
+
+## Custom fan curves
+
+The patched NitroSense UI adds a custom curve editor to:
+
+`Scenario > Fan Control > Custom`
+
+That editor:
+
+- exposes separate CPU and GPU curves
+- supports linking both fans with `Sync`
+- writes to `C:\ProgramData\NitroSense\FanController\config.json`
+- is backed by the installed background controller, so the curve keeps applying after the UI closes
 
 ## Notes
 

@@ -1,0 +1,1378 @@
+<div id="ns-mode-fallback-panel" hidden></div>
+<style>
+  .ns-curve-section {
+    position: relative !important;
+  }
+
+  .ns-curve-workspace {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    z-index: 5;
+    pointer-events: none;
+    align-items: stretch;
+  }
+
+  .ns-curve-workspace::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid rgba(255, 102, 36, 0.14);
+    background: linear-gradient(180deg, rgba(7, 0, 0, 0.92) 0%, rgba(16, 0, 0, 0.86) 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 102, 36, 0.06);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .ns-curve-host {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: 100%;
+    min-height: 560px;
+    margin: 0;
+    padding: 14px 18px 18px;
+    border: 1px solid var(--color-gd-30);
+    background:
+      linear-gradient(180deg, rgba(89, 37, 0, 0.72) 0%, rgba(43, 4, 0, 0.72) 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 102, 36, 0.08);
+    display: flex;
+    flex-direction: column;
+    z-index: 1;
+    pointer-events: auto;
+  }
+
+  .ns-curve-host[data-fan-name="gpu"] {
+    grid-column: 1;
+  }
+
+  .ns-curve-host[data-fan-name="cpu"] {
+    grid-column: 2;
+  }
+
+  .ns-curve-head {
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  .ns-curve-title {
+    font-size: 18px;
+    color: var(--color-ff);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .ns-curve-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--color-c0);
+    margin-top: 10px;
+  }
+
+  .ns-curve-chip {
+    min-width: 48px;
+    padding: 3px 8px;
+    border: 1px solid var(--color-gd-30);
+    background: rgba(0, 0, 0, 0.22);
+    color: var(--color-ff);
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .ns-curve-grid {
+    position: relative;
+    width: 100%;
+    flex: 1 1 auto;
+    height: 270px;
+    min-height: 270px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(255, 102, 36, 0.06) 0%, rgba(0, 0, 0, 0) 100%),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      rgba(0, 0, 0, 0.24);
+    background-size: 100% 100%, 20% 100%, 100% 25%, 100% 100%;
+    overflow: visible;
+  }
+
+  .ns-curve-grid svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .ns-curve-node-readout {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, calc(-100% - 10px));
+    min-width: 76px;
+    padding: 6px 8px 5px;
+    border: 1px solid rgba(255, 160, 0, 0.28);
+    background: linear-gradient(180deg, rgba(86, 26, 0, 0.96) 0%, rgba(34, 7, 0, 0.96) 100%);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+    text-align: center;
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .ns-curve-node-readout[hidden] {
+    display: none !important;
+  }
+
+  .ns-curve-node-readout::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    transform: rotate(45deg);
+    border-right: 1px solid rgba(255, 160, 0, 0.28);
+    border-bottom: 1px solid rgba(255, 160, 0, 0.28);
+    background: rgba(34, 7, 0, 0.96);
+  }
+
+  .ns-curve-node-readout-label {
+    display: block;
+    font-size: 8px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.48);
+  }
+
+  .ns-curve-node-readout-value {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.2;
+    color: var(--color-ff);
+  }
+
+  .ns-curve-axis {
+    position: absolute;
+    pointer-events: none;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.62);
+    letter-spacing: 0.02em;
+  }
+
+  .ns-curve-axis-x {
+    right: 10px;
+    bottom: 8px;
+  }
+
+  .ns-curve-axis-y {
+    left: 10px;
+    top: 8px;
+  }
+
+  .ns-curve-legend {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--color-c0);
+    font-size: 11px;
+  }
+
+  .ns-curve-readouts {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .ns-curve-readout {
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 102, 36, 0.16);
+    background: rgba(0, 0, 0, 0.18);
+    text-align: center;
+  }
+
+  .ns-curve-readout-label {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .ns-curve-readout-value {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--color-ff);
+    line-height: 1.2;
+  }
+
+  .ns-curve-points {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .ns-curve-point-chip {
+    padding: 5px 3px;
+    border: 1px solid rgba(255, 102, 36, 0.16);
+    background: rgba(0, 0, 0, 0.18);
+    text-align: center;
+  }
+
+  .ns-curve-point-label {
+    display: block;
+    font-size: 8px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .ns-curve-point-value {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    color: var(--color-ff);
+    line-height: 1.1;
+  }
+
+  .ns-curve-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .ns-curve-button {
+    min-width: 0;
+    width: 100%;
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--color-gd-30);
+    background: rgba(0, 0, 0, 0.24);
+    color: var(--color-c0);
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer !important;
+    white-space: nowrap;
+  }
+
+  .ns-curve-button:hover {
+    border-color: var(--color-lb-50);
+    color: var(--color-ff);
+    background: rgba(255, 102, 36, 0.12);
+  }
+
+  .ns-curve-button.is-primary {
+    background: linear-gradient(180deg, rgba(255, 102, 36, 0.92) 0%, rgba(128, 52, 18, 0.95) 100%);
+    border-color: rgba(255, 160, 0, 0.34);
+    color: var(--color-ff);
+  }
+
+  .ns-curve-status {
+    grid-column: 1 / -1;
+    color: var(--color-lig);
+    font-size: 11px;
+    text-align: center;
+    min-height: 16px;
+  }
+
+  .ns-curve-point {
+    cursor: pointer !important;
+  }
+
+  .ns-curve-hidden-stock .predator-slider,
+  .ns-curve-hidden-stock [role="slider"],
+  .ns-curve-hidden-stock button,
+  .ns-curve-hidden-stock .predator-btn {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  .ns-curve-hide {
+    display: none !important;
+  }
+
+  .ns-curve-stock-root-hidden {
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  .ns-curve-footnote {
+    margin-top: 8px;
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 10px;
+    line-height: 1.35;
+    text-align: center;
+  }
+
+  .ns-curve-frame-tight {
+    min-height: 174px !important;
+    padding-bottom: 8px !important;
+  }
+</style>
+<script>
+  (() => {
+    const ROOT_ID = "ns-fan-curve-root";
+    const STORAGE_KEY = "ns_fan_curve_profiles_v1";
+    const CONTROLLER_CONFIG_PATH = "C:\\ProgramData\\NitroSense\\FanController\\config.json";
+    const DEFAULT_CURVE = [
+      { temp: 35, speed: 24 },
+      { temp: 50, speed: 36 },
+      { temp: 65, speed: 56 },
+      { temp: 80, speed: 78 },
+      { temp: 92, speed: 100 }
+    ];
+    const state = {
+      panels: new Map(),
+      lastApply: new Map(),
+      ddscReady: null,
+      monitorCall: null,
+      configCache: null,
+      configCacheAt: 0
+    };
+    const nodeRequire = (() => {
+      try {
+        if (typeof window.require === "function") return window.require.bind(window);
+      } catch {}
+      try {
+        if (typeof require === "function") return require;
+      } catch {}
+      return null;
+    })();
+    const fs = (() => {
+      if (!nodeRequire) return null;
+      try { return nodeRequire("fs"); } catch { return null; }
+    })();
+    const path = (() => {
+      if (!nodeRequire) return null;
+      try { return nodeRequire("path"); } catch { return null; }
+    })();
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const round = (value) => Math.round(Number(value) || 0);
+    const lower = (value) => String(value || "").trim().toLowerCase();
+    const now = () => Date.now();
+    const CHART_MIN_X = 4;
+    const CHART_MAX_X = 96;
+    const CHART_MIN_Y = 4;
+    const CHART_MAX_Y = 96;
+
+    function isVisible(element) {
+      if (!element || !(element instanceof HTMLElement)) return false;
+      const style = window.getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    }
+
+    function leafText(element) {
+      if (!element || !isVisible(element)) return "";
+      const text = (element.textContent || "").replace(/\s+/g, " ").trim();
+      if (!text) return "";
+      for (const child of Array.from(element.children || [])) {
+        if ((child.textContent || "").replace(/\s+/g, " ").trim() === text) {
+          return "";
+        }
+      }
+      return text;
+    }
+
+    function walkVisibleLeaves() {
+      return Array.from(document.querySelectorAll("body *"))
+        .filter((element) => leafText(element).length > 0);
+    }
+
+    function findExactText(text) {
+      const wanted = lower(text);
+      return walkVisibleLeaves().filter((element) => lower(leafText(element)) === wanted);
+    }
+
+    function getCurrentScenarioName() {
+      const ignore = new Set([
+        "scenario profile",
+        "scenario manager",
+        "mode",
+        "fan control",
+        "advanced settings",
+        "details",
+        "monitoring",
+        "custom",
+        "auto",
+        "max",
+        "balanced",
+        "daily use",
+        "gaming",
+        "quiet occasion"
+      ]);
+
+      for (const label of findExactText("Scenario Profile")) {
+        let scope = label.parentElement;
+        for (let depth = 0; scope && depth < 4; depth += 1, scope = scope.parentElement) {
+          const candidates = Array.from(scope.querySelectorAll("*"))
+            .filter((element) => isVisible(element))
+            .map((element) => leafText(element))
+            .filter((text) => text && text.length <= 40);
+          const choice = candidates.find((text) => {
+            const value = lower(text);
+            return !ignore.has(value) && !/^(cpu|gpu|rpm|\d+|daily use|gaming|quiet occasion)$/i.test(text);
+          });
+          if (choice) return choice;
+        }
+      }
+
+      const fallback = walkVisibleLeaves()
+        .map((element) => leafText(element))
+        .find((text) => text && text.length <= 40 && !ignore.has(lower(text)) && !/^(cpu|gpu|rpm|\d+c?)$/i.test(text));
+      return fallback || "Default";
+    }
+
+    function cloneCurve(points) {
+      return points.map((point) => ({ temp: round(point.temp), speed: round(point.speed) }));
+    }
+
+    function getDefaultScenarioConfig() {
+      return {
+        enabled: true,
+        cpuCurve: cloneCurve(DEFAULT_CURVE),
+        gpuCurve: cloneCurve(DEFAULT_CURVE)
+      };
+    }
+
+    function getDefaultControllerConfig() {
+      return {
+        enabled: true,
+        pollIntervalMs: 3000,
+        applyDeltaPercent: 3,
+        acOnly: false,
+        followNitroScenario: true,
+        nitroConfigPath: "C:\\ProgramData\\OEM\\NitroSense\\ProfilePool\\config.json",
+        defaultScenario: getDefaultScenarioConfig(),
+        scenarios: {}
+      };
+    }
+
+    function normalizeCurve(points) {
+      if (!Array.isArray(points) || points.length < 2) {
+        return cloneCurve(DEFAULT_CURVE);
+      }
+      const normalized = points
+        .map((point) => ({
+          temp: clamp(round(point?.temp), 0, 100),
+          speed: clamp(round(point?.speed), 0, 100)
+        }))
+        .filter((point) => Number.isFinite(point.temp) && Number.isFinite(point.speed))
+        .sort((left, right) => left.temp - right.temp);
+      return normalized.length >= 2 ? normalized : cloneCurve(DEFAULT_CURVE);
+    }
+
+    function normalizeScenarioConfig(input) {
+      return {
+        enabled: input?.enabled !== false,
+        syncFans: !!input?.syncFans,
+        cpuCurve: normalizeCurve(input?.cpuCurve),
+        gpuCurve: normalizeCurve(input?.gpuCurve)
+      };
+    }
+
+    function normalizeControllerConfig(input) {
+      const defaults = getDefaultControllerConfig();
+      const normalized = {
+        enabled: input?.enabled !== false,
+        pollIntervalMs: Math.max(round(input?.pollIntervalMs || defaults.pollIntervalMs), 1000),
+        applyDeltaPercent: Math.max(round(input?.applyDeltaPercent || defaults.applyDeltaPercent), 1),
+        acOnly: !!input?.acOnly,
+        followNitroScenario: input?.followNitroScenario !== false,
+        nitroConfigPath: input?.nitroConfigPath || defaults.nitroConfigPath,
+        defaultScenario: normalizeScenarioConfig(input?.defaultScenario || {
+          cpuCurve: input?.cpuCurve,
+          gpuCurve: input?.gpuCurve
+        }),
+        scenarios: {}
+      };
+      const scenarioSource = input?.scenarios && typeof input.scenarios === "object" ? input.scenarios : {};
+      Object.entries(scenarioSource).forEach(([scenarioName, scenarioConfig]) => {
+        normalized.scenarios[scenarioName] = normalizeScenarioConfig(scenarioConfig);
+      });
+      return normalized;
+    }
+
+    function readLocalFallbackConfig() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? normalizeControllerConfig(JSON.parse(raw)) : getDefaultControllerConfig();
+      } catch {
+        return getDefaultControllerConfig();
+      }
+    }
+
+    function writeLocalFallbackConfig(config) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    }
+
+    function readSharedConfig(force = false) {
+      if (!force && state.configCache && now() - state.configCacheAt < 1200) {
+        return state.configCache;
+      }
+
+      let config = null;
+      if (fs && path) {
+        try {
+          if (!fs.existsSync(CONTROLLER_CONFIG_PATH)) {
+            fs.mkdirSync(path.dirname(CONTROLLER_CONFIG_PATH), { recursive: true });
+            config = getDefaultControllerConfig();
+            fs.writeFileSync(CONTROLLER_CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
+          } else {
+            const raw = fs.readFileSync(CONTROLLER_CONFIG_PATH, "utf8");
+            config = normalizeControllerConfig(raw ? JSON.parse(raw) : {});
+          }
+        } catch (error) {
+          console.warn("Shared config read failed", error);
+        }
+      }
+
+      if (!config) {
+        config = readLocalFallbackConfig();
+      }
+
+      state.configCache = config;
+      state.configCacheAt = now();
+      return config;
+    }
+
+    function writeSharedConfig(config) {
+      const normalized = normalizeControllerConfig(config);
+      state.configCache = normalized;
+      state.configCacheAt = now();
+
+      if (fs && path) {
+        try {
+          fs.mkdirSync(path.dirname(CONTROLLER_CONFIG_PATH), { recursive: true });
+          fs.writeFileSync(CONTROLLER_CONFIG_PATH, JSON.stringify(normalized, null, 2), "utf8");
+          return;
+        } catch (error) {
+          console.warn("Shared config write failed", error);
+        }
+      }
+
+      writeLocalFallbackConfig(normalized);
+    }
+
+    function ensureScenarioConfig(config, scenarioName) {
+      if (!config.scenarios[scenarioName]) {
+        const defaults = normalizeScenarioConfig(config.defaultScenario);
+        config.scenarios[scenarioName] = {
+          enabled: defaults.enabled,
+          syncFans: defaults.syncFans,
+          cpuCurve: cloneCurve(defaults.cpuCurve),
+          gpuCurve: cloneCurve(defaults.gpuCurve)
+        };
+        return { scenario: config.scenarios[scenarioName], created: true };
+      }
+      return { scenario: config.scenarios[scenarioName], created: false };
+    }
+
+    function getScenarioConfig(scenarioName) {
+      const config = readSharedConfig();
+      const ensured = ensureScenarioConfig(config, scenarioName);
+      if (ensured.created) {
+        writeSharedConfig(config);
+      }
+      return ensured.scenario;
+    }
+
+    function getCurveForScenario(scenarioName, fanName) {
+      const scenarioConfig = getScenarioConfig(scenarioName);
+      return cloneCurve(fanName === "cpu" ? scenarioConfig.cpuCurve : scenarioConfig.gpuCurve);
+    }
+
+    function saveCurveForScenario(scenarioName, fanName, points) {
+      const config = readSharedConfig();
+      const ensured = ensureScenarioConfig(config, scenarioName);
+      if (fanName === "cpu") {
+        ensured.scenario.cpuCurve = normalizeCurve(points);
+      } else {
+        ensured.scenario.gpuCurve = normalizeCurve(points);
+      }
+      writeSharedConfig(config);
+    }
+
+    function getScenarioEnabled(scenarioName) {
+      return getScenarioConfig(scenarioName).enabled !== false;
+    }
+
+    function setScenarioEnabled(scenarioName, enabled) {
+      const config = readSharedConfig();
+      const ensured = ensureScenarioConfig(config, scenarioName);
+      ensured.scenario.enabled = !!enabled;
+      writeSharedConfig(config);
+    }
+
+    function getScenarioSyncFans(scenarioName) {
+      return !!getScenarioConfig(scenarioName).syncFans;
+    }
+
+    function setScenarioSyncFans(scenarioName, syncFans) {
+      const config = readSharedConfig();
+      const ensured = ensureScenarioConfig(config, scenarioName);
+      ensured.scenario.syncFans = !!syncFans;
+      if (ensured.scenario.syncFans) {
+        ensured.scenario.gpuCurve = cloneCurve(ensured.scenario.cpuCurve);
+      }
+      writeSharedConfig(config);
+    }
+
+    async function ensureDdsc() {
+      if (window.ddsc) return window.ddsc;
+      if (!state.ddscReady) {
+        state.ddscReady = (async () => {
+          if (typeof window.InitDDSC === "function") {
+            try {
+              await window.InitDDSC();
+            } catch (error) {
+              console.warn("InitDDSC failed", error);
+            }
+          }
+          const started = Date.now();
+          while (!window.ddsc && Date.now() - started < 10000) {
+            await sleep(150);
+          }
+          return window.ddsc || null;
+        })();
+      }
+      return state.ddscReady;
+    }
+
+    async function resolveDdscFunction(preferredNames) {
+      const ddsc = await ensureDdsc();
+      if (!ddsc) return null;
+      const categories = Object.entries(ddsc).filter(([, value]) => value && typeof value === "object");
+      for (const name of preferredNames) {
+        for (const [categoryName, bucket] of categories) {
+          if (typeof bucket[name] === "function") {
+            return { categoryName, functionName: name, fn: bucket[name].bind(bucket) };
+          }
+        }
+      }
+      const lowered = preferredNames.map((name) => lower(name));
+      for (const [categoryName, bucket] of categories) {
+        for (const [functionName, fn] of Object.entries(bucket)) {
+          if (typeof fn !== "function") continue;
+          const functionLower = lower(functionName);
+          if (lowered.some((name) => functionLower.includes(name))) {
+            return { categoryName, functionName, fn: fn.bind(bucket) };
+          }
+        }
+      }
+      return null;
+    }
+
+    function findValueByPathHint(source, pathHints) {
+      const queue = [{ value: source, path: [] }];
+      const matches = [];
+      while (queue.length) {
+        const current = queue.shift();
+        if (!current || current.value == null) continue;
+        if (typeof current.value === "number" && Number.isFinite(current.value)) {
+          const pathText = current.path.join(" ").toLowerCase();
+          if (pathHints.every((hint) => pathText.includes(hint))) {
+            matches.push(current.value);
+          }
+          continue;
+        }
+        if (Array.isArray(current.value)) {
+          current.value.forEach((item, index) => queue.push({ value: item, path: current.path.concat(String(index)) }));
+          continue;
+        }
+        if (typeof current.value === "object") {
+          Object.entries(current.value).forEach(([key, value]) => {
+            queue.push({ value, path: current.path.concat(key) });
+          });
+        }
+      }
+      return matches.find((value) => value > 0 && value < 130) ?? null;
+    }
+
+    async function getMonitorSnapshot() {
+      if (!state.monitorCall) {
+        state.monitorCall = resolveDdscFunction(["getMonitorData", "getUpdatedData"]);
+      }
+      const monitorFn = await state.monitorCall;
+      if (!monitorFn) return null;
+      try {
+        const result = await monitorFn.fn();
+        return result || null;
+      } catch (error) {
+        console.warn("Monitor read failed", error);
+        return null;
+      }
+    }
+
+    async function getTemperatureMap() {
+      const monitorData = await getMonitorSnapshot();
+      const temperatures = { cpu: null, gpu: null };
+      if (monitorData && typeof monitorData === "object") {
+        temperatures.cpu = findValueByPathHint(monitorData, ["cpu", "temp"]);
+        temperatures.gpu = findValueByPathHint(monitorData, ["gpu", "temp"]);
+        if (temperatures.cpu == null) temperatures.cpu = findValueByPathHint(monitorData, ["cpu"]);
+        if (temperatures.gpu == null) temperatures.gpu = findValueByPathHint(monitorData, ["gpu"]);
+      }
+      if (temperatures.cpu != null || temperatures.gpu != null) return temperatures;
+
+      const leaves = walkVisibleLeaves();
+      for (const element of leaves) {
+        const text = leafText(element);
+        if (!/\d+/.test(text) || !/c/i.test(text)) continue;
+        const number = round(text.replace(/[^\d]/g, ""));
+        if (!number || number > 130) continue;
+        const scope = element.parentElement?.parentElement || element.parentElement;
+        const labelText = scope ? lower(scope.textContent || "") : "";
+        if (temperatures.cpu == null && labelText.includes("cpu")) temperatures.cpu = number;
+        if (temperatures.gpu == null && labelText.includes("gpu")) temperatures.gpu = number;
+      }
+      return temperatures;
+    }
+
+    function interpolate(points, temperature) {
+      const sorted = cloneCurve(points).sort((left, right) => left.temp - right.temp);
+      if (temperature <= sorted[0].temp) return sorted[0].speed;
+      if (temperature >= sorted[sorted.length - 1].temp) return sorted[sorted.length - 1].speed;
+      for (let index = 0; index < sorted.length - 1; index += 1) {
+        const left = sorted[index];
+        const right = sorted[index + 1];
+        if (temperature >= left.temp && temperature <= right.temp) {
+          const ratio = (temperature - left.temp) / Math.max(1, right.temp - left.temp);
+          return left.speed + (right.speed - left.speed) * ratio;
+        }
+      }
+      return sorted[sorted.length - 1].speed;
+    }
+
+    function pointToChart(point) {
+      const spanX = CHART_MAX_X - CHART_MIN_X;
+      const spanY = CHART_MAX_Y - CHART_MIN_Y;
+      return {
+        x: CHART_MIN_X + (clamp(round(point.temp), 0, 100) / 100) * spanX,
+        y: CHART_MAX_Y - (clamp(round(point.speed), 0, 100) / 100) * spanY
+      };
+    }
+
+    function chartToPoint(xRatio, yRatio) {
+      const plotX = clamp(xRatio, CHART_MIN_X / 100, CHART_MAX_X / 100);
+      const plotY = clamp(yRatio, CHART_MIN_Y / 100, CHART_MAX_Y / 100);
+      const spanX = CHART_MAX_X - CHART_MIN_X;
+      const spanY = CHART_MAX_Y - CHART_MIN_Y;
+      return {
+        temp: clamp(round(((plotX * 100) - CHART_MIN_X) / spanX * 100), 0, 100),
+        speed: clamp(round((CHART_MAX_Y - (plotY * 100)) / spanY * 100), 0, 100)
+      };
+    }
+
+    function findSectionByName(name) {
+      const label = findExactText(name)
+        .find((element) => {
+          const scopeText = lower(element.parentElement?.textContent || "");
+          return scopeText.includes("rpm") || scopeText.includes("auto") || scopeText.includes("custom");
+        });
+      if (!label) return null;
+
+      let root = label.parentElement;
+      while (root && !root.querySelector(".predator-slider, .mat-slider, [role='slider']")) {
+        root = root.parentElement;
+      }
+      if (!root || !isVisible(root)) return null;
+
+      const slider = root.querySelector(".mat-slider, [role='slider'], .predator-slider");
+      const autoButton = Array.from(root.querySelectorAll("button, div, span"))
+        .find((element) => lower(leafText(element)) === "auto");
+      if (!slider) return null;
+      return { name: lower(name), label, root, slider, autoButton };
+    }
+
+    function getSectionContainer(section) {
+      let candidate = section.root;
+      let cursor = section.root;
+      while (cursor && cursor instanceof HTMLElement && cursor !== document.body) {
+        const rect = cursor.getBoundingClientRect();
+        if (rect.width >= 320 && rect.width <= 760 && rect.height >= 280) {
+          candidate = cursor;
+          break;
+        }
+        cursor = cursor.parentElement;
+      }
+      return candidate;
+    }
+
+    function getSharedFanContainer() {
+      const gpuSection = findSectionByName("GPU");
+      const cpuSection = findSectionByName("CPU");
+      if (!gpuSection || !cpuSection) return null;
+
+      let cursor = gpuSection.root;
+      let candidate = null;
+      while (cursor && cursor instanceof HTMLElement && cursor !== document.body) {
+        if (cursor.contains(cpuSection.root)) {
+          const rect = cursor.getBoundingClientRect();
+          if (rect.width >= 760 && rect.height >= 320) {
+            candidate = cursor;
+            break;
+          }
+        }
+        cursor = cursor.parentElement;
+      }
+
+      return candidate || getSectionContainer(gpuSection);
+    }
+
+    function getCurveWorkspace(gpuSection, cpuSection) {
+      const existing = document.querySelector(".ns-curve-workspace");
+      if (existing) return existing;
+
+      const panelContainer = getSharedFanContainer();
+      if (!panelContainer || !gpuSection || !cpuSection) return null;
+
+      panelContainer.classList.add("ns-curve-section");
+
+      let workspace = panelContainer.querySelector(".ns-curve-workspace");
+      if (!workspace) {
+        workspace = document.createElement("div");
+        workspace.className = "ns-curve-workspace";
+        panelContainer.appendChild(workspace);
+      }
+
+      const containerRect = panelContainer.getBoundingClientRect();
+      const gpuRect = gpuSection.root.getBoundingClientRect();
+      const cpuRect = cpuSection.root.getBoundingClientRect();
+      const topOffset = Math.max(
+        8,
+        Math.round(Math.min(gpuRect.top, cpuRect.top) - containerRect.top)
+      );
+      workspace.style.top = `${topOffset}px`;
+      const requiredHeight = topOffset + 580;
+      if (panelContainer.offsetHeight < requiredHeight) {
+        panelContainer.style.minHeight = `${requiredHeight}px`;
+      }
+
+      return workspace;
+    }
+
+    function commonAncestor(first, second, stopAt) {
+      if (!first || !second) return null;
+      let cursor = first;
+      while (cursor && cursor !== stopAt?.parentElement) {
+        if (cursor.contains(second)) return cursor;
+        cursor = cursor.parentElement;
+      }
+      return null;
+    }
+
+    function getSliderNode(section) {
+      if (!section) return null;
+      if (section.slider instanceof HTMLElement) return section.slider;
+      return null;
+    }
+
+    function getSliderValue(section) {
+      const node = getSliderNode(section);
+      if (!node) return null;
+      const candidates = [
+        node,
+        node.querySelector?.("[role='slider']"),
+        node.querySelector?.(".mat-slider")
+      ].filter(Boolean);
+      for (const candidate of candidates) {
+        const ariaValue = candidate.getAttribute?.("aria-valuenow");
+        const reflectValue = candidate.getAttribute?.("ng-reflect-value");
+        const raw = ariaValue || reflectValue;
+        if (raw != null && raw !== "") return clamp(round(raw), 0, 100);
+      }
+      return null;
+    }
+
+    function dispatchMouseClick(node, x, y) {
+      ["mousedown", "mouseup", "click"].forEach((type) => {
+        node.dispatchEvent(new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          buttons: 1
+        }));
+      });
+    }
+
+    async function nudgeSlider(section, direction, steps) {
+      const node = getSliderNode(section);
+      if (!node) return false;
+      const key = direction > 0 ? "ArrowRight" : "ArrowLeft";
+      const target = node.matches(".mat-slider, [role='slider']") ? node : node.querySelector(".mat-slider, [role='slider']") || node;
+      target.focus?.();
+      for (let index = 0; index < steps; index += 1) {
+        const eventInit = {
+          key,
+          code: key,
+          bubbles: true,
+          cancelable: true
+        };
+        target.dispatchEvent(new KeyboardEvent("keydown", eventInit));
+        target.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+        await sleep(18);
+      }
+      return true;
+    }
+
+    async function clickSliderTrack(section, targetPercent) {
+      const node = getSliderNode(section);
+      if (!node) return false;
+      const track = node.querySelector?.(".mat-slider-track-wrapper") || node.querySelector?.(".mat-slider-wrapper") || node;
+      const rect = track.getBoundingClientRect();
+      if (!rect.width || !rect.height) return false;
+      const x = rect.left + rect.width * (clamp(targetPercent, 0, 100) / 100);
+      const y = rect.top + rect.height * 0.5;
+      dispatchMouseClick(track, x, y);
+      await sleep(40);
+      return true;
+    }
+
+    async function ensureSectionManual(section) {
+      if (!section.autoButton || section.__manualAttempted) return;
+      section.__manualAttempted = true;
+      try {
+        section.autoButton.click();
+      } catch {}
+      await sleep(120);
+    }
+
+    async function applyTargetSpeed(section, targetPercent) {
+      const target = clamp(round(targetPercent), 0, 100);
+      if (target <= 0) return;
+      let current = getSliderValue(section);
+      if (current == null) {
+        await ensureSectionManual(section);
+        current = getSliderValue(section);
+      }
+
+      if (current == null) {
+        await clickSliderTrack(section, target);
+        return;
+      }
+
+      const difference = target - current;
+      if (Math.abs(difference) <= 1) return;
+      await ensureSectionManual(section);
+      const steps = Math.min(Math.abs(difference), 100);
+      await nudgeSlider(section, Math.sign(difference), steps);
+      const after = getSliderValue(section);
+      if (after == null || Math.abs(after - target) > 4) {
+        await clickSliderTrack(section, target);
+      }
+    }
+
+    function getPanelMarkup(fanName) {
+      return `
+        <div class="ns-curve-host" data-fan-name="${fanName}">
+          <div class="ns-curve-head">
+            <div class="ns-curve-title">${fanName.toUpperCase()} curve</div>
+          </div>
+          <div class="ns-curve-grid">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              <polyline data-role="fill" fill="rgba(255,102,36,0.16)" stroke="none"></polyline>
+              <polyline data-role="line" fill="none" stroke="url(#ns-curve-gradient-${fanName})" stroke-width="2.4" points=""></polyline>
+              <defs>
+                <linearGradient id="ns-curve-gradient-${fanName}" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#ff761a"></stop>
+                  <stop offset="100%" stop-color="#ffa000"></stop>
+                </linearGradient>
+              </defs>
+              <line x1="0" y1="100" x2="100" y2="100" stroke="rgba(255,255,255,0.16)" stroke-width="0.8"></line>
+              <line x1="0" y1="0" x2="0" y2="100" stroke="rgba(255,255,255,0.16)" stroke-width="0.8"></line>
+              </svg>
+              <div class="ns-curve-axis ns-curve-axis-y">fan %</div>
+              <div class="ns-curve-axis ns-curve-axis-x">temp C</div>
+              <div class="ns-curve-node-readout" data-role="node-readout" hidden>
+                <span class="ns-curve-node-readout-label">Selected Point</span>
+                <span class="ns-curve-node-readout-value" data-role="node-readout-value">-- C / --%</span>
+              </div>
+            </div>
+          <div class="ns-curve-legend">
+            <span data-role="legend-left">35 C / 24%</span>
+            <span data-role="legend-right">92 C / 100%</span>
+          </div>
+          <div class="ns-curve-readouts">
+            <div class="ns-curve-readout">
+              <span class="ns-curve-readout-label">Current Temp</span>
+              <span class="ns-curve-readout-value" data-role="current-temp">-- C</span>
+            </div>
+            <div class="ns-curve-readout">
+              <span class="ns-curve-readout-label">Target Speed</span>
+              <span class="ns-curve-readout-value" data-role="target-speed">-- %</span>
+            </div>
+          </div>
+          <div class="ns-curve-points" data-role="points"></div>
+          <div class="ns-curve-actions">
+            <button class="ns-curve-button is-primary" type="button" data-action="enable">Curve On</button>
+            <button class="ns-curve-button" type="button" data-action="sync">Sync Both</button>
+            <button class="ns-curve-button" type="button" data-action="reset">Reset</button>
+            <button class="ns-curve-button" type="button" data-action="balanced">Balanced</button>
+            <div class="ns-curve-status" data-role="status"></div>
+          </div>
+          <div class="ns-curve-footnote">Drag nodes to shape the response. When sync is on, one edit updates both fans.</div>
+        </div>
+      `;
+    }
+
+    function pointsToPolyline(points) {
+      return points.map((point) => {
+        const chartPoint = pointToChart(point);
+        return `${chartPoint.x},${chartPoint.y}`;
+      }).join(" ");
+    }
+
+    function pointsToFillPolyline(points) {
+      const body = points.map((point) => {
+        const chartPoint = pointToChart(point);
+        return `${chartPoint.x},${chartPoint.y}`;
+      }).join(" ");
+      const startPoint = pointToChart(points[0]);
+      const endPoint = pointToChart(points[points.length - 1]);
+      const start = `${startPoint.x},${CHART_MAX_Y}`;
+      const end = `${endPoint.x},${CHART_MAX_Y}`;
+      return `${start} ${body} ${end}`;
+    }
+
+    function renderPanel(panelState) {
+      const { host, points, fanName } = panelState;
+      host.querySelector("[data-role='line']").setAttribute("points", pointsToPolyline(points));
+      host.querySelector("[data-role='fill']").setAttribute("points", pointsToFillPolyline(points));
+      host.querySelector("[data-role='legend-left']").textContent = `${points[0].temp} C / ${points[0].speed}%`;
+      host.querySelector("[data-role='legend-right']").textContent = `${points[points.length - 1].temp} C / ${points[points.length - 1].speed}%`;
+      host.querySelector("[data-role='points']").innerHTML = points.map((point, index) => `
+        <div class="ns-curve-point-chip">
+          <span class="ns-curve-point-label">P${index + 1}</span>
+          <span class="ns-curve-point-value">${point.temp}C<br>${point.speed}%</span>
+        </div>
+      `).join("");
+
+      host.querySelectorAll(".ns-curve-point").forEach((node) => node.remove());
+      const svg = host.querySelector("svg");
+      points.forEach((point, index) => {
+        const chartPoint = pointToChart(point);
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("class", "ns-curve-point");
+        circle.setAttribute("r", index === points.length - 1 ? "2.8" : "2.5");
+        circle.setAttribute("cx", String(chartPoint.x));
+        circle.setAttribute("cy", String(chartPoint.y));
+        circle.setAttribute("fill", "#ff6624");
+        circle.setAttribute("stroke", "#ffffff");
+        circle.setAttribute("stroke-width", "0.8");
+        circle.dataset.index = String(index);
+        svg.appendChild(circle);
+      });
+
+      const readout = host.querySelector("[data-role='node-readout']");
+      const readoutValue = host.querySelector("[data-role='node-readout-value']");
+      if (Number.isInteger(panelState.selectedIndex) && panelState.selectedIndex >= 0 && panelState.selectedIndex < points.length) {
+        const selectedPoint = points[panelState.selectedIndex];
+        const chartPoint = pointToChart(selectedPoint);
+        readout.hidden = false;
+        readout.style.left = `${chartPoint.x}%`;
+        readout.style.top = `${chartPoint.y}%`;
+        readoutValue.textContent = `${selectedPoint.temp} C / ${selectedPoint.speed}%`;
+      } else {
+        readout.hidden = true;
+      }
+
+      host.querySelector("[data-action='enable']").textContent = panelState.enabled ? "Curve On" : "Curve Off";
+      host.querySelector("[data-action='enable']").classList.toggle("is-primary", panelState.enabled);
+        host.querySelector("[data-action='sync']").textContent = panelState.syncFans ? "Sync On" : "Sync Off";
+      host.querySelector("[data-action='sync']").classList.toggle("is-primary", panelState.syncFans);
+      panelState.row.classList.add("ns-curve-hidden-stock");
+      if (panelState.hideRow) {
+        panelState.hideRow.classList.add("ns-curve-hide");
+      }
+      panelState.root.dataset.nsCurveFan = fanName;
+    }
+
+    function attachPointDrag(panelState) {
+      const svg = panelState.host.querySelector("svg");
+      const startDrag = (pointerEvent) => {
+        const target = pointerEvent.target;
+        if (!(target instanceof SVGCircleElement) || !target.classList.contains("ns-curve-point")) return;
+        const index = Number(target.dataset.index);
+        if (!Number.isFinite(index)) return;
+        pointerEvent.preventDefault();
+        panelState.selectedIndex = index;
+        renderPanel(panelState);
+        const rect = svg.getBoundingClientRect();
+          const onMove = (event) => {
+            const xRatio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+            const yRatio = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+            const nextPoint = chartToPoint(xRatio, yRatio);
+              const minTemp = index === 0 ? 0 : panelState.points[index - 1].temp + 3;
+              const maxTemp = index === panelState.points.length - 1 ? 100 : panelState.points[index + 1].temp - 3;
+            const temp = clamp(nextPoint.temp, minTemp, maxTemp);
+            const speed = nextPoint.speed;
+            panelState.points[index] = { temp, speed };
+            renderPanel(panelState);
+            if (panelState.syncFans) {
+              const otherPanel = state.panels.get(panelState.fanName === "cpu" ? "gpu" : "cpu");
+              if (otherPanel && otherPanel.scenarioName === panelState.scenarioName) {
+                otherPanel.points = cloneCurve(panelState.points);
+                otherPanel.selectedIndex = index;
+                renderPanel(otherPanel);
+              }
+            }
+            panelState.status.textContent = `Edited ${panelState.fanName.toUpperCase()} curve`;
+          };
+          const onUp = () => {
+            persistPanel(panelState);
+            if (panelState.syncFans) {
+              syncScenarioPanels(panelState.scenarioName, panelState.fanName);
+            }
+            panelState.selectedIndex = null;
+            renderPanel(panelState);
+            if (panelState.syncFans) {
+              const otherPanel = state.panels.get(panelState.fanName === "cpu" ? "gpu" : "cpu");
+              if (otherPanel && otherPanel.scenarioName === panelState.scenarioName) {
+                otherPanel.selectedIndex = null;
+                renderPanel(otherPanel);
+              }
+            }
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+          };
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+      };
+      svg.addEventListener("pointerdown", startDrag);
+    }
+
+    function persistPanel(panelState) {
+      saveCurveForScenario(panelState.scenarioName, panelState.fanName, panelState.points);
+    }
+
+    function syncScenarioPanels(scenarioName, sourceFanName = "cpu") {
+      const syncFans = getScenarioSyncFans(scenarioName);
+      const cpuPanel = state.panels.get("cpu");
+      const gpuPanel = state.panels.get("gpu");
+      if (!syncFans || !cpuPanel || !gpuPanel) return;
+      if (cpuPanel.scenarioName !== scenarioName || gpuPanel.scenarioName !== scenarioName) return;
+
+      const sourcePanel = sourceFanName === "gpu" ? gpuPanel : cpuPanel;
+      const mirroredPoints = cloneCurve(sourcePanel.points);
+      cpuPanel.points = cloneCurve(mirroredPoints);
+      gpuPanel.points = cloneCurve(mirroredPoints);
+      saveCurveForScenario(scenarioName, "cpu", cpuPanel.points);
+      saveCurveForScenario(scenarioName, "gpu", gpuPanel.points);
+      gpuPanel.syncFans = true;
+      cpuPanel.syncFans = true;
+      renderPanel(cpuPanel);
+      renderPanel(gpuPanel);
+    }
+
+    function tightenFanControlFrame() {
+      const controlLabel = findExactText("Fan Control").find((element) => {
+        const scopeText = lower(element.parentElement?.textContent || "");
+        return scopeText.includes("auto") && scopeText.includes("max") && scopeText.includes("custom");
+      });
+      if (!controlLabel) return;
+
+      let frame = controlLabel.parentElement;
+      while (frame && frame instanceof HTMLElement) {
+        const rect = frame.getBoundingClientRect();
+        if (rect.width > 700 && rect.height > 140) {
+          frame.classList.add("ns-curve-frame-tight");
+          return;
+        }
+        frame = frame.parentElement;
+      }
+    }
+
+    function updateScenarioEnabledUi(scenarioName, enabled, statusText) {
+      state.panels.forEach((panelState) => {
+        if (panelState.scenarioName !== scenarioName) return;
+        panelState.enabled = enabled;
+        renderPanel(panelState);
+        if (statusText) {
+          panelState.status.textContent = statusText;
+        }
+      });
+    }
+
+    function buildPanel(section, workspace) {
+      if (state.panels.has(section.name)) {
+        const existing = state.panels.get(section.name);
+        if (document.body.contains(existing.host) && document.body.contains(existing.stock.root)) {
+          return existing;
+        }
+        state.panels.delete(section.name);
+      }
+      const scenarioName = getCurrentScenarioName();
+      const points = getCurveForScenario(scenarioName, section.name);
+      const sliderRow = section.slider.closest("div") || section.root;
+      const autoRow = section.autoButton ? commonAncestor(section.slider, section.autoButton, section.root) : null;
+      const safeAutoRow = autoRow && autoRow !== section.root ? autoRow : null;
+          const panelContainer = workspace || getSectionContainer(section);
+        const hostWrap = document.createElement("div");
+        hostWrap.id = `${ROOT_ID}-${section.name}`;
+        hostWrap.innerHTML = getPanelMarkup(section.name);
+        const host = hostWrap.firstElementChild;
+        const hideRow = safeAutoRow || sliderRow;
+        panelContainer.appendChild(host);
+
+      const panelState = {
+        fanName: section.name,
+        root: section.root,
+        row: sliderRow,
+        hideRow,
+        host,
+        scenarioName,
+        points,
+        enabled: getScenarioEnabled(scenarioName),
+        syncFans: getScenarioSyncFans(scenarioName),
+        selectedIndex: null,
+        status: host.querySelector("[data-role='status']"),
+        currentTempNode: host.querySelector("[data-role='current-temp']"),
+        targetSpeedNode: host.querySelector("[data-role='target-speed']"),
+        stock: section
+      };
+
+      host.querySelector("[data-action='enable']").addEventListener("click", () => {
+        const nextEnabled = !getScenarioEnabled(panelState.scenarioName);
+        setScenarioEnabled(panelState.scenarioName, nextEnabled);
+        updateScenarioEnabledUi(panelState.scenarioName, nextEnabled, nextEnabled ? "Curve loop enabled" : "Curve loop paused");
+      });
+
+      host.querySelector("[data-action='sync']").addEventListener("click", () => {
+        const nextSync = !getScenarioSyncFans(panelState.scenarioName);
+        setScenarioSyncFans(panelState.scenarioName, nextSync);
+        state.panels.forEach((otherPanel) => {
+          if (otherPanel.scenarioName !== panelState.scenarioName) return;
+          otherPanel.syncFans = nextSync;
+          if (nextSync) {
+            otherPanel.points = getCurveForScenario(panelState.scenarioName, otherPanel.fanName);
+          }
+          renderPanel(otherPanel);
+        });
+        if (nextSync) {
+          syncScenarioPanels(panelState.scenarioName, panelState.fanName);
+        }
+        panelState.status.textContent = nextSync ? "CPU and GPU curves linked" : "CPU and GPU curves unlinked";
+      });
+
+      host.querySelector("[data-action='reset']").addEventListener("click", () => {
+        panelState.points = cloneCurve(DEFAULT_CURVE);
+        renderPanel(panelState);
+        persistPanel(panelState);
+        if (panelState.syncFans) {
+          syncScenarioPanels(panelState.scenarioName, panelState.fanName);
+        }
+        panelState.status.textContent = "Curve reset";
+      });
+
+      host.querySelector("[data-action='balanced']").addEventListener("click", () => {
+        panelState.points = [
+          { temp: 35, speed: 24 },
+          { temp: 48, speed: 34 },
+          { temp: 62, speed: 52 },
+          { temp: 76, speed: 72 },
+          { temp: 90, speed: 96 }
+        ];
+        renderPanel(panelState);
+        persistPanel(panelState);
+        if (panelState.syncFans) {
+          syncScenarioPanels(panelState.scenarioName, panelState.fanName);
+        }
+        panelState.status.textContent = "Balanced preset loaded";
+      });
+
+      renderPanel(panelState);
+      attachPointDrag(panelState);
+      state.panels.set(section.name, panelState);
+      return panelState;
+    }
+
+    function mountPanels() {
+        const sections = [findSectionByName("GPU"), findSectionByName("CPU")].filter(Boolean);
+        if (sections.length < 2) return;
+        const gpuSection = sections.find((section) => section.name === "gpu");
+        const cpuSection = sections.find((section) => section.name === "cpu");
+        const workspace = getCurveWorkspace(gpuSection, cpuSection);
+        sections.forEach((section) => {
+          section.root.classList.add("ns-curve-stock-root-hidden");
+        });
+        sections.forEach((section) => {
+          const panel = buildPanel(section, workspace);
+          const currentScenario = getCurrentScenarioName();
+        if (panel.scenarioName !== currentScenario) {
+          panel.scenarioName = currentScenario;
+          panel.points = getCurveForScenario(currentScenario, panel.fanName);
+          panel.enabled = getScenarioEnabled(currentScenario);
+          panel.syncFans = getScenarioSyncFans(currentScenario);
+          renderPanel(panel);
+        } else if (panel.enabled !== getScenarioEnabled(currentScenario) || panel.syncFans !== getScenarioSyncFans(currentScenario)) {
+          panel.enabled = getScenarioEnabled(currentScenario);
+          panel.syncFans = getScenarioSyncFans(currentScenario);
+          renderPanel(panel);
+        }
+      });
+      tightenFanControlFrame();
+    }
+
+    async function tickCurveLoop() {
+      mountPanels();
+      if (!state.panels.size) return;
+      const temperatures = await getTemperatureMap();
+      for (const panel of state.panels.values()) {
+        const temperature = temperatures[panel.fanName];
+        if (temperature == null) {
+          panel.currentTempNode.textContent = "-- C";
+          panel.targetSpeedNode.textContent = "-- %";
+          continue;
+        }
+        const target = round(interpolate(panel.points, temperature));
+        panel.currentTempNode.textContent = `${temperature} C`;
+        panel.targetSpeedNode.textContent = `${target}%`;
+        if (!panel.enabled) continue;
+        const stampKey = `${panel.scenarioName}:${panel.fanName}`;
+        const currentStamp = state.lastApply.get(stampKey) || { temp: null, target: null, time: 0 };
+        if (currentStamp.target === target && currentStamp.temp === temperature && Date.now() - currentStamp.time < 4500) {
+          continue;
+        }
+        await applyTargetSpeed(panel.stock, target);
+        state.lastApply.set(stampKey, { temp: temperature, target, time: Date.now() });
+        panel.status.textContent = `${panel.fanName.toUpperCase()} ${temperature} C -> ${target}%`;
+      }
+    }
+
+    function start() {
+      const observer = new MutationObserver(() => {
+        mountPanels();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      mountPanels();
+      tickCurveLoop();
+      window.setInterval(tickCurveLoop, 3500);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", start, { once: true });
+    } else {
+      start();
+    }
+  })();
+</script>

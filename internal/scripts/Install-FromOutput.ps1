@@ -76,20 +76,29 @@ if ($missingPatchedExtensions.Count -gt 0) {
 Ensure-Directory -Path $installParent
 Ensure-Directory -Path $workRoot
 
+foreach ($taskName in @("NitroSenseFanController", "NitroSenseLauncher")) {
+    try {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Out-Null
+    } catch {
+    }
+}
+
 $stoppedInstalled = @(Stop-ProcessesFromPathPrefix -PathPrefix $installRoot)
+$stoppedInstalledReferenced = @(Stop-ProcessesReferencingPathPrefix -PathPrefix $installRoot)
 $stoppedOutput = @(Stop-ProcessesFromPathPrefix -PathPrefix $portableSource)
 
-if ($stoppedInstalled.Count -gt 0 -or $stoppedOutput.Count -gt 0) {
+if ($stoppedInstalled.Count -gt 0 -or $stoppedInstalledReferenced.Count -gt 0 -or $stoppedOutput.Count -gt 0) {
     Write-Host "Closed running NitroSense process(es)."
 }
 
-Reset-Directory -Path $installRoot
-Copy-DirectoryContents -Source $portableSource -Destination $installRoot
+Ensure-Directory -Path $installRoot
+Copy-DirectoryContentsResilient -Source $portableSource -Destination $installRoot
 
 & (Join-Path $toolsRoot "Install-Backend.ps1") -PackageRoot $backendRoot -WorkRoot (Join-Path $workRoot "backend")
 & (Join-Path $toolsRoot "Register-NitroLauncher.ps1") -PortableRoot $installRoot
 & (Join-Path $toolsRoot "Create-DesktopShortcut.ps1") -PortableRoot $installRoot -ShortcutPath (Join-Path ([Environment]::GetFolderPath("Desktop")) "NitroSense.lnk")
 & (Join-Path $toolsRoot "Install-NitroLauncherStub.ps1") -TargetExe (Join-Path $installRoot "NitroSense.exe")
+& (Join-Path $toolsRoot "Install-BackgroundFanController.ps1") -InstallRoot $installRoot
 & (Join-Path $toolsRoot "Tidy-NitroConfig.ps1")
 
 Write-Host ""

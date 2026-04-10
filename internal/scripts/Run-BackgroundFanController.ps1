@@ -6,6 +6,12 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$script:SilentThresholdPercent = 25
+$script:OperatingModeQuiet = 0
+$script:OperatingModeDefault = 1
+$script:SoundModeMusic = 0
+$script:FanModeAuto = 0
+$script:FanModeCustom = 2
 
 function Ensure-Directory {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -71,11 +77,12 @@ function New-DefaultScenarioConfig {
 function Get-DefaultControllerConfig {
     return [ordered]@{
         enabled = $true
-        pollIntervalMs = 3000
-        applyDeltaPercent = 3
+        pollIntervalMs = 1000
+        applyDeltaPercent = 1
         acOnly = $false
         followNitroScenario = $true
         nitroConfigPath = "C:\ProgramData\OEM\NitroSense\ProfilePool\config.json"
+        uiStoragePath = (Join-Path $env:APPDATA "acernitrosense\Local Storage\leveldb")
         defaultScenario = New-DefaultScenarioConfig
         scenarios = [ordered]@{}
     }
@@ -174,6 +181,9 @@ function Get-ControllerConfig {
         if ($parsed.PSObject.Properties.Name -contains "nitroConfigPath" -and [string]::IsNullOrWhiteSpace([string]$parsed.nitroConfigPath) -eq $false) {
             $config.nitroConfigPath = [string]$parsed.nitroConfigPath
         }
+        if ($parsed.PSObject.Properties.Name -contains "uiStoragePath" -and [string]::IsNullOrWhiteSpace([string]$parsed.uiStoragePath) -eq $false) {
+            $config.uiStoragePath = [string]$parsed.uiStoragePath
+        }
 
         if (($parsed.PSObject.Properties.Name -contains "cpuCurve") -or ($parsed.PSObject.Properties.Name -contains "gpuCurve")) {
             $config.defaultScenario = [ordered]@{
@@ -197,6 +207,222 @@ function Get-ControllerConfig {
     }
 
     return $config
+}
+
+function ConvertTo-NormalizedControllerConfig {
+    param($InputObject)
+
+    $defaults = Get-DefaultControllerConfig
+    if ($null -eq $InputObject) {
+        return $defaults
+    }
+
+    $normalized = [ordered]@{
+        enabled = if ($InputObject.PSObject.Properties.Name -contains "enabled") { [bool]$InputObject.enabled } else { $true }
+        pollIntervalMs = if ($InputObject.PSObject.Properties.Name -contains "pollIntervalMs") { [int]$InputObject.pollIntervalMs } else { [int]$defaults.pollIntervalMs }
+        applyDeltaPercent = if ($InputObject.PSObject.Properties.Name -contains "applyDeltaPercent") { [int]$InputObject.applyDeltaPercent } else { [int]$defaults.applyDeltaPercent }
+        acOnly = if ($InputObject.PSObject.Properties.Name -contains "acOnly") { [bool]$InputObject.acOnly } else { $false }
+        followNitroScenario = if ($InputObject.PSObject.Properties.Name -contains "followNitroScenario") { [bool]$InputObject.followNitroScenario } else { $true }
+        nitroConfigPath = if ($InputObject.PSObject.Properties.Name -contains "nitroConfigPath" -and [string]::IsNullOrWhiteSpace([string]$InputObject.nitroConfigPath) -eq $false) { [string]$InputObject.nitroConfigPath } else { [string]$defaults.nitroConfigPath }
+        uiStoragePath = if ($InputObject.PSObject.Properties.Name -contains "uiStoragePath" -and [string]::IsNullOrWhiteSpace([string]$InputObject.uiStoragePath) -eq $false) { [string]$InputObject.uiStoragePath } else { [string]$defaults.uiStoragePath }
+        defaultScenario = $null
+        scenarios = [ordered]@{}
+    }
+
+    if (($InputObject.PSObject.Properties.Name -contains "cpuCurve") -or ($InputObject.PSObject.Properties.Name -contains "gpuCurve")) {
+        $normalized.defaultScenario = [ordered]@{
+            enabled = $true
+            syncFans = if ($InputObject.PSObject.Properties.Name -contains "syncFans") { [bool]$InputObject.syncFans } else { $false }
+            cpuCurve = ConvertTo-NormalizedCurve -Curve $InputObject.cpuCurve -FanName "cpu"
+            gpuCurve = ConvertTo-NormalizedCurve -Curve $InputObject.gpuCurve -FanName "gpu"
+        }
+    } else {
+        $normalized.defaultScenario = ConvertTo-NormalizedScenarioConfig -ScenarioConfig $(if ($InputObject.PSObject.Properties.Name -contains "defaultScenario") { $InputObject.defaultScenario } else { $defaults.defaultScenario })
+    }
+
+    if ($InputObject.PSObject.Properties.Name -contains "scenarios" -and $InputObject.scenarios) {
+        foreach ($property in $InputObject.scenarios.PSObject.Properties) {
+            $normalized.scenarios[$property.Name] = ConvertTo-NormalizedScenarioConfig -ScenarioConfig $property.Value
+        }
+    }
+
+    return $normalized
+}
+
+function Read-TextFileShared {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $fileStream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $reader = New-Object System.IO.StreamReader($fileStream, [System.Text.Encoding]::UTF8, $true, 4096, $true)
+        try {
+            return $reader.ReadToEnd()
+        } finally {
+            $reader.Dispose()
+        }
+    } finally {
+        $fileStream.Dispose()
+    }
+}
+
+function Get-EmbeddedJsonAfterKey {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$Key
+    )
+
+    $keyIndex = $Text.LastIndexOf($Key)
+    if ($keyIndex -lt 0) {
+        return $null
+    }
+
+    $startIndex = $Text.IndexOf('{', $keyIndex)
+    if ($startIndex -lt 0) {
+        return $null
+    }
+
+    $depth = 0
+    $inString = $false
+    $escape = $false
+    for ($index = $startIndex; $index -lt $Text.Length; $index += 1) {
+        $char = $Text[$index]
+
+        if ($escape) {
+            $escape = $false
+            continue
+        }
+
+        if ($char -eq '\') {
+            $escape = $true
+            continue
+        }
+
+        if ($char -eq '"') {
+            $inString = -not $inString
+            continue
+        }
+
+        if ($inString) {
+            continue
+        }
+
+        if ($char -eq '{') {
+            $depth += 1
+            continue
+        }
+
+        if ($char -eq '}') {
+            $depth -= 1
+            if ($depth -eq 0) {
+                return $Text.Substring($startIndex, ($index - $startIndex + 1))
+            }
+        }
+    }
+
+    return $null
+}
+
+function Get-LevelDbJsonValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$DirectoryPath,
+        [Parameter(Mandatory = $true)][string]$Key
+    )
+
+    if (-not (Test-Path -LiteralPath $DirectoryPath)) {
+        return $null
+    }
+
+    $candidates = Get-ChildItem -LiteralPath $DirectoryPath -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in @(".log", ".ldb") } |
+        Sort-Object LastWriteTimeUtc -Descending
+
+    foreach ($candidate in $candidates) {
+        try {
+            $match = Select-String -Path $candidate.FullName -Pattern $Key -Encoding UTF8 -SimpleMatch -ErrorAction Stop |
+                Select-Object -Last 1
+            if ($null -eq $match -or [string]::IsNullOrWhiteSpace([string]$match.Line)) {
+                continue
+            }
+
+            $jsonText = Get-EmbeddedJsonAfterKey -Text ([string]$match.Line) -Key $Key
+            if ([string]::IsNullOrWhiteSpace($jsonText)) {
+                continue
+            }
+
+            return ($jsonText | ConvertFrom-Json)
+        } catch {
+            continue
+        }
+    }
+
+    return $null
+}
+
+function ConvertTo-ScenarioLookupName {
+    param([string]$Name)
+
+    $value = [string]$Name
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return ""
+    }
+
+    $value = $value.ToLowerInvariant()
+    $value = [regex]::Replace($value, "(scenario|profile|manager|fan|control|mode|advanced|settings|details|custom|auto|max)", " ")
+    $value = [regex]::Replace($value, "[^a-z0-9]+", " ")
+    $value = [regex]::Replace($value, "\s+", " ").Trim()
+    return $value
+}
+
+function Get-MatchedScenarioConfigFromTable {
+    param(
+        $ScenarioTable,
+        [Parameter(Mandatory = $true)][string]$ScenarioName
+    )
+
+    if ($null -eq $ScenarioTable) {
+        return $null
+    }
+
+    if ($ScenarioTable -is [System.Collections.IDictionary] -and $ScenarioTable.Contains($ScenarioName)) {
+        return $ScenarioTable[$ScenarioName]
+    }
+
+    $targetKey = ConvertTo-ScenarioLookupName -Name $ScenarioName
+    if ([string]::IsNullOrWhiteSpace($targetKey)) {
+        return $null
+    }
+
+    $entries = @()
+    if ($ScenarioTable -is [System.Collections.IDictionary]) {
+        $entries = @($ScenarioTable.GetEnumerator())
+    } elseif ($ScenarioTable.PSObject) {
+        $entries = @($ScenarioTable.PSObject.Properties | ForEach-Object {
+            [pscustomobject]@{
+                Key = $_.Name
+                Value = $_.Value
+            }
+        })
+    }
+
+    foreach ($entry in $entries) {
+        $entryKey = ConvertTo-ScenarioLookupName -Name ([string]$entry.Key)
+        if ($entryKey -eq $targetKey -or $entryKey.Contains($targetKey) -or $targetKey.Contains($entryKey)) {
+            return $entry.Value
+        }
+    }
+
+    return $null
+}
+
+function Get-UiOverrideControllerConfig {
+    param([Parameter(Mandatory = $true)][string]$UiStoragePath)
+
+    $rawConfig = Get-LevelDbJsonValue -DirectoryPath $UiStoragePath -Key "fan_curve_profiles_v1"
+    if ($null -eq $rawConfig) {
+        return $null
+    }
+
+    return (ConvertTo-NormalizedControllerConfig -InputObject $rawConfig)
 }
 
 function ConvertTo-AcerPacketBytes {
@@ -235,6 +461,7 @@ function Invoke-AcerSocketRequest {
         $requestBytes = ConvertTo-AcerPacketBytes -PacketId $PacketId -Payload $Payload
         $stream.Write($requestBytes, 0, $requestBytes.Length)
         $stream.Flush()
+        $client.Client.Shutdown([System.Net.Sockets.SocketShutdown]::Send)
 
         $builder = New-Object System.Text.StringBuilder
         $buffer = New-Object byte[] 4096
@@ -296,6 +523,27 @@ function Set-AcerFanControl {
     return (Invoke-AcerSocketRequest -Port 46933 -PacketId 100 -Payload @{
         Function = "FAN_CONTROL"
         Parameter = $Payload
+    })
+}
+
+function Set-AcerOperatingMode {
+    param([Parameter(Mandatory = $true)][int]$Mode)
+    return (Invoke-AcerSocketRequest -Port 46933 -PacketId 100 -Payload @{
+        Function = "OPERATING_MODE"
+        Parameter = @{
+            mode = $Mode
+        }
+    })
+}
+
+function Set-AcerSoundMode {
+    param([Parameter(Mandatory = $true)][int]$Mode)
+    return (Invoke-AcerSocketRequest -Port 46933 -PacketId 100 -Payload @{
+        Function = "SOUND_MODE"
+        Parameter = @{
+            mode = $Mode
+            function = "DTS"
+        }
     })
 }
 
@@ -365,14 +613,15 @@ function New-FanControlPayload {
     param(
         [Parameter(Mandatory = $true)]$Support,
         [Parameter(Mandatory = $true)][int]$CpuSpeed,
-        [Parameter(Mandatory = $true)][int]$GpuSpeed
+        [Parameter(Mandatory = $true)][int]$GpuSpeed,
+        [Parameter(Mandatory = $true)][bool]$UseSilentMode
     )
 
     $customFans = @()
     foreach ($fan in $Support) {
         $targetSpeed = if ($fan.fan_name -like "CPU*") { $CpuSpeed } else { $GpuSpeed }
         $customFans += [ordered]@{
-            fan_custom_auto = 0
+            fan_custom_auto = if ($UseSilentMode) { 1 } else { 0 }
             fan_custom_speed = $targetSpeed
             fan_index = [int]$fan.fan_index
             fan_name = [string]$fan.fan_name
@@ -380,7 +629,7 @@ function New-FanControlPayload {
     }
 
     return [ordered]@{
-        mode = 2
+        mode = if ($UseSilentMode) { $script:FanModeAuto } else { $script:FanModeCustom }
         custom_fan_data = $customFans
     }
 }
@@ -399,6 +648,10 @@ function Get-TargetSpeeds {
         GpuTemp = [int][math]::Round($gpuTemp)
         CpuSpeed = Limit-Percent (Get-InterpolatedFanSpeed -Temperature $cpuTemp -Curve $ScenarioConfig.cpuCurve)
         GpuSpeed = Limit-Percent (Get-InterpolatedFanSpeed -Temperature $gpuTemp -Curve $ScenarioConfig.gpuCurve)
+        UseSilentMode = ([math]::Max(
+            (Limit-Percent (Get-InterpolatedFanSpeed -Temperature $cpuTemp -Curve $ScenarioConfig.cpuCurve)),
+            (Limit-Percent (Get-InterpolatedFanSpeed -Temperature $gpuTemp -Curve $ScenarioConfig.gpuCurve))
+        ) -le $script:SilentThresholdPercent)
     }
 }
 
@@ -409,14 +662,7 @@ function Test-ShouldApply {
         [Parameter(Mandatory = $true)][int]$ApplyDeltaPercent
     )
 
-    if ($null -eq $LastApplied) {
-        return $true
-    }
-
-    return (
-        [math]::Abs($LastApplied.CpuSpeed - $Target.CpuSpeed) -ge $ApplyDeltaPercent -or
-        [math]::Abs($LastApplied.GpuSpeed - $Target.GpuSpeed) -ge $ApplyDeltaPercent
-    )
+    return $true
 }
 
 function Get-ActiveNitroScenarioState {
@@ -424,7 +670,9 @@ function Get-ActiveNitroScenarioState {
 
     $state = [ordered]@{
         Name = "Default"
-        FanMode = 2
+        FanMode = $script:FanModeCustom
+        OpMode = $script:OperatingModeDefault
+        AudioMode = $script:SoundModeMusic
     }
 
     if (-not (Test-Path -LiteralPath $NitroConfigPath)) {
@@ -460,6 +708,12 @@ function Get-ActiveNitroScenarioState {
         if ($profile.PSObject.Properties.Name -contains "fanControl" -and $profile.fanControl -and $profile.fanControl.PSObject.Properties.Name -contains "mode") {
             $state.FanMode = [int]$profile.fanControl.mode
         }
+        if ($profile.PSObject.Properties.Name -contains "opMode") {
+            $state.OpMode = [int]$profile.opMode
+        }
+        if ($profile.PSObject.Properties.Name -contains "audioMode") {
+            $state.AudioMode = [int]$profile.audioMode
+        }
     } catch {
         Write-ControllerLog -Message ("Failed to read NitroSense scenario config: {0}" -f $_.Exception.Message) -Level "WARN"
     }
@@ -470,11 +724,24 @@ function Get-ActiveNitroScenarioState {
 function Get-EffectiveScenarioConfig {
     param(
         [Parameter(Mandatory = $true)]$Config,
-        [Parameter(Mandatory = $true)][string]$ScenarioName
+        [Parameter(Mandatory = $true)][string]$ScenarioName,
+        $UiOverrideConfig = $null
     )
 
-    if ($Config.scenarios -and $Config.scenarios.Contains($ScenarioName)) {
-        return (ConvertTo-NormalizedScenarioConfig -ScenarioConfig $Config.scenarios[$ScenarioName])
+    if ($null -ne $UiOverrideConfig) {
+        $uiScenario = Get-MatchedScenarioConfigFromTable -ScenarioTable $UiOverrideConfig.scenarios -ScenarioName $ScenarioName
+        if ($null -ne $uiScenario) {
+            return (ConvertTo-NormalizedScenarioConfig -ScenarioConfig $uiScenario)
+        }
+    }
+
+    $fileScenario = Get-MatchedScenarioConfigFromTable -ScenarioTable $Config.scenarios -ScenarioName $ScenarioName
+    if ($null -ne $fileScenario) {
+        return (ConvertTo-NormalizedScenarioConfig -ScenarioConfig $fileScenario)
+    }
+
+    if ($null -ne $UiOverrideConfig -and $null -ne $UiOverrideConfig.defaultScenario) {
+        return (ConvertTo-NormalizedScenarioConfig -ScenarioConfig $UiOverrideConfig.defaultScenario)
     }
 
     return (ConvertTo-NormalizedScenarioConfig -ScenarioConfig $Config.defaultScenario)
@@ -503,10 +770,16 @@ try {
 
     $lastApplied = $null
     $lastScenarioName = $null
+    $lastUiDebug = ""
+    $lastCurveDebug = ""
 
     while ($true) {
         try {
             $config = Get-ControllerConfig -Path $script:ResolvedConfigPath
+            $uiOverrideConfig = $null
+            if ($config.Contains("uiStoragePath") -and [string]::IsNullOrWhiteSpace([string]$config["uiStoragePath"]) -eq $false) {
+                $uiOverrideConfig = Get-UiOverrideControllerConfig -UiStoragePath ([string]$config.uiStoragePath)
+            }
             $pollIntervalMs = [math]::Max([int]$config.pollIntervalMs, 1000)
             $applyDeltaPercent = [math]::Max([int]$config.applyDeltaPercent, 1)
 
@@ -531,13 +804,38 @@ try {
                 $lastScenarioName = $scenarioState.Name
             }
 
+            $matchedUiScenario = $null
+            if ($null -ne $uiOverrideConfig) {
+                $matchedUiScenario = Get-MatchedScenarioConfigFromTable -ScenarioTable $uiOverrideConfig.scenarios -ScenarioName $scenarioState.Name
+            }
+            $uiDebug = if ($null -ne $matchedUiScenario) {
+                "UI override matched for [{0}]" -f $scenarioState.Name
+            } elseif ($null -ne $uiOverrideConfig) {
+                "UI override config loaded but no scenario matched for [{0}]" -f $scenarioState.Name
+            } else {
+                "No UI override config"
+            }
+            if ($uiDebug -ne $lastUiDebug) {
+                Write-ControllerLog -Message $uiDebug -Level "DEBUG"
+                $lastUiDebug = $uiDebug
+            }
+
             if ([bool]$config.followNitroScenario -and $scenarioState.FanMode -ne 2) {
                 $lastApplied = $null
                 Start-Sleep -Milliseconds $pollIntervalMs
                 continue
             }
 
-            $scenarioConfig = Get-EffectiveScenarioConfig -Config $config -ScenarioName $scenarioState.Name
+            $scenarioConfig = Get-EffectiveScenarioConfig -Config $config -ScenarioName $scenarioState.Name -UiOverrideConfig $uiOverrideConfig
+            $curveDebug = "CPU[{0}] GPU[{1}]" -f (
+                (($scenarioConfig.cpuCurve | ForEach-Object { '{0}/{1}' -f $_.temp, $_.speed }) -join ',')
+            ), (
+                (($scenarioConfig.gpuCurve | ForEach-Object { '{0}/{1}' -f $_.temp, $_.speed }) -join ',')
+            )
+            if ($curveDebug -ne $lastCurveDebug) {
+                Write-ControllerLog -Message ("Effective curve [{0}] {1}" -f $scenarioState.Name, $curveDebug) -Level "DEBUG"
+                $lastCurveDebug = $curveDebug
+            }
             if (-not [bool]$scenarioConfig.enabled) {
                 $lastApplied = $null
                 Start-Sleep -Milliseconds $pollIntervalMs
@@ -548,9 +846,14 @@ try {
             $target = Get-TargetSpeeds -ScenarioConfig $scenarioConfig -MonitorData $monitor
 
             if (Test-ShouldApply -LastApplied $lastApplied -Target $target -ApplyDeltaPercent $applyDeltaPercent) {
-                $payload = New-FanControlPayload -Support $support -CpuSpeed $target.CpuSpeed -GpuSpeed $target.GpuSpeed
+                $payload = New-FanControlPayload -Support $support -CpuSpeed $target.CpuSpeed -GpuSpeed $target.GpuSpeed -UseSilentMode ([bool]$target.UseSilentMode)
+                $targetOperatingMode = if ([bool]$target.UseSilentMode) { $script:OperatingModeQuiet } else { [int]$scenarioState.OpMode }
+                $targetSoundMode = if ([bool]$target.UseSilentMode) { $script:SoundModeMusic } else { [int]$scenarioState.AudioMode }
+                [void](Set-AcerOperatingMode -Mode $targetOperatingMode)
+                [void](Set-AcerSoundMode -Mode $targetSoundMode)
                 [void](Set-AcerFanControl -Payload $payload)
-                Write-ControllerLog -Message ("Applied fan curve [{0}] CPU {1}C->{2}% GPU {3}C->{4}%" -f $scenarioState.Name, $target.CpuTemp, $target.CpuSpeed, $target.GpuTemp, $target.GpuSpeed)
+                $modeText = if ([bool]$target.UseSilentMode) { "quiet-auto" } else { "custom-restore" }
+                Write-ControllerLog -Message ("Applied fan curve [{0}] ({1}) CPU {2}C->{3}% GPU {4}C->{5}%" -f $scenarioState.Name, $modeText, $target.CpuTemp, $target.CpuSpeed, $target.GpuTemp, $target.GpuSpeed)
                 $lastApplied = $target
             }
 

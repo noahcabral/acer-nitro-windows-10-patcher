@@ -251,15 +251,33 @@ function Get-PackageRootFromExpandedZip {
         [string]$ExpandedRoot
     )
 
+    function Test-IsNitroPackageRoot {
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$Root
+        )
+
+        $hasUwp = Test-Path -LiteralPath (Join-Path $Root "UWP")
+        if (-not $hasUwp) {
+            return $false
+        }
+
+        $hasBackend = (Test-Path -LiteralPath (Join-Path $Root "AgentService")) -or
+            (Test-Path -LiteralPath (Join-Path $Root "AcerSystemMonitorService"))
+        $hasInstaller = (Test-Path -LiteralPath (Join-Path $Root "Setup")) -or
+            (Test-Path -LiteralPath (Join-Path $Root "Setup.exe"))
+        $hasAcerAgent = (Test-Path -LiteralPath (Join-Path $Root "AcerQAAgent")) -or
+            (Test-Path -LiteralPath (Join-Path $Root "AcerCCAgent")) -or
+            (Test-Path -LiteralPath (Join-Path $Root "AcerDIAgent"))
+
+        return ($hasBackend -or $hasInstaller) -and $hasAcerAgent
+    }
+
     $candidates = @(Get-ChildItem -LiteralPath $ExpandedRoot -Directory -Recurse | Where-Object {
-        (Test-Path (Join-Path $_.FullName "UWP")) -and
-        (Test-Path (Join-Path $_.FullName "AgentService")) -and
-        (Test-Path (Join-Path $_.FullName "AcerSystemMonitorService"))
+        Test-IsNitroPackageRoot -Root $_.FullName
     } | Select-Object -ExpandProperty FullName)
 
-    if ((Test-Path (Join-Path $ExpandedRoot "UWP")) -and
-        (Test-Path (Join-Path $ExpandedRoot "AgentService")) -and
-        (Test-Path (Join-Path $ExpandedRoot "AcerSystemMonitorService"))) {
+    if (Test-IsNitroPackageRoot -Root $ExpandedRoot) {
         return $ExpandedRoot
     }
 

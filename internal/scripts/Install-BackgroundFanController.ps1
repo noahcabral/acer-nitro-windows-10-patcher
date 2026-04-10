@@ -34,6 +34,7 @@ if (-not (Test-Path -LiteralPath $configPath)) {
   "acOnly": false,
   "followNitroScenario": true,
   "nitroConfigPath": "C:\\ProgramData\\OEM\\NitroSense\\ProfilePool\\config.json",
+  "uiStoragePath": "$($env:APPDATA -replace '\\','\\\\')\\\\acernitrosense\\\\Local Storage\\\\leveldb",
   "defaultScenario": {
     "enabled": true,
     "cpuCurve": [

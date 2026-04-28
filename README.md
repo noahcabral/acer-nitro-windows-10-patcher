@@ -1,141 +1,29 @@
-# NitroSense Win10 BYOI
+# Deprecated
 
-This repo recreates a working Windows 10 NitroSense setup without redistributing Acer's files.
+This repository is deprecated and is no longer maintained.
 
-`BYOI` means `bring your own installer`: you supply Acer's official `NitroSense_5.1.385` package locally, and the scripts patch/build everything on your machine.
+Do not use this project for new installs, bug reports, or support requests.
 
-## Community
+## Use AeroForge instead
 
-Discord: [https://discord.gg/v7nG4SgNYr](https://discord.gg/v7nG4SgNYr)
+AeroForge replaces this older Windows 10 NitroSense patcher workflow with a standalone alternative that supports both Windows 10 and Windows 11.
 
-## What this does
+- Repo: [https://github.com/noahcabral/aeroforge-nitrosense-alternative](https://github.com/noahcabral/aeroforge-nitrosense-alternative)
+- Discord for bug reports and feedback: [https://discord.gg/EuWpmkjQY8](https://discord.gg/EuWpmkjQY8)
 
-- installs the working Win10 backend stack
-- patches the Nitro/monitor extension INF for Win10 binding
-- installs only the backend pieces that mattered in testing:
-  - core Nitro backend
-  - Quick Access
-  - Care Center
-- leaves Device Info out by default
-- builds a portable NitroSense frontend from the official UWP/AppX package
-- removes the Store startup dependency with local shims
-- neutralizes the packaged Store-version path and removes the Live Update widget from the user config
-- keeps the generated frontend on a clean renderer baseline to avoid the orange-screen regression
-- includes a built-in custom fan curve UI in `Scenario > Fan Control > Custom`
-- installs a background fan controller automatically so custom curves keep working after NitroSense is closed
+## Status
 
-## What this does not ship
+- No further development
+- No further fixes
+- No further releases
+- No support for new bug reports on this repo
 
-This repo intentionally does **not** include:
+## Why this was deprecated
 
-- Acer installers
-- Acer AppX packages
-- extracted Acer app files
-- patched Acer binaries
-- rebuilt Acer packages
+This repository was an older compatibility workflow for running NitroSense on Windows 10.
 
-Keep generated outputs out of Git.
+It has been superseded by AeroForge, which is the actively maintained replacement.
 
-This project is an unofficial compatibility workflow. It is not affiliated with or endorsed by Acer.
+## Historical note
 
-## Prereqs
-
-- Windows 10 x64
-- the original Acer NitroSense zip
-- PowerShell 5+
-- `tar.exe` available in `PATH`
-
-## End-user flow
-
-1. Put exactly one original Acer NitroSense zip or one extracted NitroSense folder into [input](C:/Users/noah/Desktop/nitrosense-win10-byoi/input).
-2. Double-click [patch.bat](C:/Users/noah/Desktop/nitrosense-win10-byoi/patch.bat).
-3. Wait for patching to finish.
-4. Open [output](C:/Users/noah/Desktop/nitrosense-win10-byoi/output).
-
-The patcher builds:
-
-- `output\NitroSense_portable`
-- `output\Backend`
-- `output\tools`
-
-## After patching
-
-If you want the simplest normal-user setup after patching:
-
-1. Double-click [install.bat](C:/Users/noah/Desktop/nitrosense-win10-byoi/install.bat).
-2. Let it copy NitroSense into `C:\Program Files\NitroSense`.
-3. It will install the backend, register the launcher task, create the desktop shortcut, apply the Nitro-key launcher wrapper, and install the background fan controller.
-
-If you only want to install the backend manually on a Windows 10 machine:
-
-1. Reboot once with `Disable driver signature enforcement`.
-2. Open an elevated PowerShell in `output\tools`.
-3. Run:
-
-```powershell
-.\Install-Backend.ps1 -PackageRoot ..\Backend
-```
-
-Then optionally run:
-
-```powershell
-.\Register-NitroLauncher.ps1 -PortableRoot ..\NitroSense_portable
-.\Create-DesktopShortcut.ps1 -PortableRoot ..\NitroSense_portable
-.\Tidy-NitroConfig.ps1
-```
-
-## Optional background fan controller
-
-The main installer now installs the background fan controller automatically.
-
-If you ever need to reinstall it manually:
-
-```powershell
-.\output\tools\Install-BackgroundFanController.ps1 -InstallRoot "$env:ProgramFiles\NitroSense"
-```
-
-This installs a hidden autostarting controller that:
-
-- reads temperatures directly from Acer System Monitor Service on `127.0.0.1:46753`
-- sends `FAN_CONTROL` updates directly to Acer Agent Service on `127.0.0.1:46933`
-- keeps working after NitroSense is closed
-- follows the NitroSense scenario config and built-in custom fan curve editor
-
-Config:
-
-`C:\ProgramData\NitroSense\FanController\config.json`
-
-Log:
-
-`C:\ProgramData\NitroSense\FanController\controller.log`
-
-Current tradeoff:
-
-- while it is running, it owns custom fan mode and will take fan control back on the next polling cycle if NitroSense changes it
-
-## Custom fan curves
-
-The patched NitroSense UI adds a custom curve editor to:
-
-`Scenario > Fan Control > Custom`
-
-That editor:
-
-- exposes separate CPU and GPU curves
-- supports linking both fans with `Sync`
-- writes to `C:\ProgramData\NitroSense\FanController\config.json`
-- is backed by the installed background controller, so the curve keeps applying after the UI closes
-
-## Notes
-
-- The backend install patches unsigned INF files on purpose. Windows 10 will reject those unless you install during a signature-enforcement-disabled boot.
-- The portable build uses an unpacked `resources\app` folder instead of a repacked `app.asar`.
-- Device Info was tested as optional and is omitted by default.
-- Quick Access and Care Center stay in because they were needed for mode and battery features.
-- The patcher/install flow neutralizes NitroSense's packaged Store-version path and removes the Live Update widget. I did not find a separate Acer NitroSense updater service/task that also needed disabling on the test machine.
-
-## Output
-
-The one-click patcher writes its results to:
-
-`.\output`
+This repo is being kept only as an old reference point. The patcher workflow here should be considered obsolete.

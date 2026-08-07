@@ -285,9 +285,10 @@ function Extract-AsarArchive {
         throw "ASAR file is too small: $AsarPath"
     }
 
+    $headerSize = [BitConverter]::ToUInt32($bytes, 4)
     $headerLength = [BitConverter]::ToUInt32($bytes, 12)
     $headerOffset = 16
-    $contentOffset = $headerOffset + $headerLength
+    $contentOffset = 8 + $headerSize
     $json = [System.Text.Encoding]::UTF8.GetString($bytes, $headerOffset, $headerLength)
     Add-Type -AssemblyName System.Web.Extensions
     $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
